@@ -1,0 +1,16 @@
+name: Guino cron — keep Render awake
+
+on:
+  schedule:
+    # Render free tier sleeps after ~15 min idle; ping every 10 minutes
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health ping
+        run: |
+          curl -fsS "${{ secrets.GUINO_BASE_URL }}/api/health" \
+            -H "Accept: application/json"
