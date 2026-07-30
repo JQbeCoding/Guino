@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+if (window.GuinoAiCache) {
+    window.GuinoAiCache.prefetchAll({ force: true, log: true });
+}
+
 const MENU_ITEMS = [
     { label: 'Dashboard', href: '/dashboard', id: 'dashboard' },
     { label: 'Courses', href: '/courses', id: 'courses' },

@@ -98,11 +98,11 @@
 
     </main>
 
+    <script src="/static/guino-ai-prefetch.js"></script>
     <script>
         async function loadStudyPlan() {
             try {
-                const response = await fetch('/api/study_plan');
-                const data = await response.json();
+                const data = await GuinoAiCache.get('/api/study_plan');
                 
                 const container = document.getElementById('study-container');
                 const loader = document.getElementById('ai-loading');
@@ -190,8 +190,7 @@
 
         async function loadFlashcards() {
             try {
-                const response = await fetch('/api/flashcards');
-                const data = await response.json();
+                const data = await GuinoAiCache.get('/api/flashcards');
 
                 const container = document.getElementById('flashcards-container');
                 const loader = document.getElementById('flashcards-loading');
@@ -243,11 +242,23 @@
             }
         }
 
-        window.onload = () => {
-            applySettings();
-            loadStudyPlan();
-            loadFlashcards();
-        };
+        function prepareStudyUiFromCache() {
+            const planReady = GuinoAiCache.isCached('/api/study_plan');
+            const cardsReady = GuinoAiCache.isCached('/api/flashcards');
+            if (planReady) {
+                document.getElementById('ai-loading')?.classList.add('hidden');
+                document.getElementById('study-container')?.classList.remove('hidden');
+            }
+            if (cardsReady) {
+                document.getElementById('flashcards-loading')?.classList.add('hidden');
+                document.getElementById('flashcards-container')?.classList.remove('hidden');
+            }
+        }
+
+        prepareStudyUiFromCache();
+        applySettings();
+        loadStudyPlan();
+        loadFlashcards();
     </script>
     <script src="/static/app-nav.js"></script>
     <script src="/static/return-scene.js"></script>

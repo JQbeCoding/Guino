@@ -64,6 +64,7 @@
         
     </main>
 
+    <script src="/static/guino-ai-prefetch.js"></script>
     <script>
         async function applySettings() {
             try {
@@ -80,8 +81,7 @@
         async function loadCourses() {
             try {
                 // Fetch AI-processed syllabus data
-                const response = await fetch('/api/courses_info');
-                const data = await response.json();
+                const data = await GuinoAiCache.get('/api/courses_info');
                 
                 const container = document.getElementById('courses-container');
                 const loader = document.getElementById('ai-loading');
@@ -136,11 +136,13 @@
             }
         }
 
-        // Trigger on load
-        window.onload = () => {
-            applySettings();
-            loadCourses();
-        };
+        if (GuinoAiCache.isCached('/api/courses_info')) {
+            document.getElementById('ai-loading')?.classList.add('hidden');
+            document.getElementById('courses-container')?.classList.remove('hidden');
+        }
+
+        applySettings();
+        loadCourses();
     </script>
     <script src="/static/app-nav.js"></script>
     <script src="/static/return-scene.js"></script>
