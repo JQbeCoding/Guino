@@ -1,0 +1,16 @@
+name: Guino cron — warm AI
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warm AI cache
+        run: |
+          curl -fsS -X POST "${{ secrets.GUINO_BASE_URL }}/api/cron/warm" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"

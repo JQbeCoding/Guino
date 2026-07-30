@@ -1,0 +1,16 @@
+name: Guino cron — reminders
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run assignment reminder cron
+        run: |
+          curl -fsS -X POST "${{ secrets.GUINO_BASE_URL }}/api/cron/reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"

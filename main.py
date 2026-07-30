@@ -1,11 +1,13 @@
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import requests
 from datetime import datetime, timezone
+from typing import Optional
 import os
 import re
 import json
+import time
 from dotenv import load_dotenv
 from google import genai
 try:
@@ -24,7 +26,10 @@ app.mount("/assets/snow_mountain", StaticFiles(directory="snow_mountain"), name=
 ACCESS_TOKEN = os.environ.get("CANVAS_ACCESS_TOKEN", "")
 BASE_URL = os.environ.get("CANVAS_BASE_URL", "https://instructure.charlotte.edu/api/v1")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").strip().rstrip("/")
+AI_CACHE_TTL_SEC = 15 * 60
+_ai_response_cache = {}
 LOCAL_TZ = ZoneInfo("America/New_York")
 HEADERS = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Accept": "application/json"}
 
@@ -38,7 +43,78 @@ DEFAULT_SETTINGS = {
     "ntfy_topic": "",
     "ntfy_enabled": False,
     "notify_remind_hours": 24,
+    "notify_last_sent_at": "",
 }
+
+def _ai_cache_get(key):
+    entry = _ai_response_cache.get(key)
+    if not entry:
+        return None
+    if time.time() - entry["ts"] > AI_CACHE_TTL_SEC:
+        del _ai_response_cache[key]
+        return None
+    return entry["payload"]
+
+def _ai_cache_set(key, payload):
+    _ai_response_cache[key] = {"ts": time.time(), "payload": payload}
+
+def notify_check_interval_hours(remind_hours):
+    try:
+        hours = max(1, min(int(remind_hours), 168))
+    except (TypeError, ValueError):
+        hours = 24
+    return max(1, min(24, hours // 4))
+
+def require_cron_secret(
+    authorization: Optional[str] = Header(None),
+    x_cron_secret: Optional[str] = Header(None),
+):
+    if not CRON_SECRET:
+        raise HTTPException(status_code=503, detail="CRON_SECRET is not configured on the server.")
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif x_cron_secret:
+        token = x_cron_secret.strip()
+    if not token or token != CRON_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid cron secret.")
+
+def persist_notify_last_sent(iso_timestamp):
+    if not os.path.exists(SETTINGS_FILE):
+        return
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            raw = json.load(f)
+        raw["notify_last_sent_at"] = iso_timestamp
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(raw, f, indent=2)
+    except Exception as e:
+        print(f"Could not persist notify_last_sent_at: {e}")
+
+def should_send_scheduled_reminder(settings):
+    if not settings.get("ntfy_enabled"):
+        return False, "notifications disabled"
+    if not normalize_ntfy_topic(settings.get("ntfy_topic", "")):
+        return False, "ntfy topic not configured"
+
+    remind_hours = settings.get("notify_remind_hours", 24)
+    interval_hours = notify_check_interval_hours(remind_hours)
+    last = (settings.get("notify_last_sent_at") or "").strip()
+    if not last:
+        return True, f"first scheduled check (every {interval_hours}h for {remind_hours}h window)"
+
+    try:
+        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=LOCAL_TZ)
+        last_dt = last_dt.astimezone(LOCAL_TZ)
+    except ValueError:
+        return True, "invalid last-sent timestamp; sending"
+
+    hours_since = (datetime.now(LOCAL_TZ) - last_dt).total_seconds() / 3600
+    if hours_since >= interval_hours:
+        return True, f"{hours_since:.1f}h since last send (interval {interval_hours}h)"
+    return False, f"skipped: {hours_since:.1f}h since last send (interval {interval_hours}h)"
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -261,6 +337,8 @@ def notify_status():
         "topic_configured": bool(topic),
         "notify_enabled": bool(settings.get("ntfy_enabled")),
         "ntfy_topic": topic or "",
+        "notify_remind_hours": settings.get("notify_remind_hours", 24),
+        "notify_check_interval_hours": notify_check_interval_hours(settings.get("notify_remind_hours", 24)),
     }
 
 @app.post("/api/notify/test")
@@ -282,9 +360,7 @@ def send_test_notification():
         print(f"ntfy Error: {e}")
         raise HTTPException(status_code=502, detail="Could not reach ntfy. Check your topic and internet connection.")
 
-@app.post("/api/notify/reminders")
-def send_assignment_reminders():
-    settings = load_settings()
+def dispatch_assignment_reminders(settings):
     if not settings.get("ntfy_enabled"):
         raise HTTPException(status_code=400, detail="Notifications are disabled in Settings.")
 
@@ -305,17 +381,95 @@ def send_assignment_reminders():
             "message": f"No assignments due within the next {remind_hours} hours.",
             "sent": False,
             "assignment_count": 0,
+            "remind_hours": remind_hours,
         }
 
     body = build_reminder_message(due_soon, settings.get("display_name"))
+    result = send_ntfy(topic, body, title="Guino reminders")
+    sent_at = datetime.now(LOCAL_TZ).isoformat()
+    persist_notify_last_sent(sent_at)
+    return {
+        "status": "success",
+        "message": f"Sent reminder for {len(due_soon)} assignment(s).",
+        "sent": True,
+        "assignment_count": len(due_soon),
+        "remind_hours": remind_hours,
+        "notify_last_sent_at": sent_at,
+        "details": result,
+    }
+
+@app.post("/api/notify/reminders")
+def send_assignment_reminders():
+    settings = load_settings()
     try:
-        result = send_ntfy(topic, body, title="Guino reminders")
+        return dispatch_assignment_reminders(settings)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ntfy Error: {e}")
+        raise HTTPException(status_code=502, detail="Could not reach ntfy. Check your topic and internet connection.")
+
+@app.post("/api/cron/warm")
+def cron_warm_ai_cache(
+    authorization: Optional[str] = Header(None),
+    x_cron_secret: Optional[str] = Header(None),
+):
+    require_cron_secret(authorization, x_cron_secret)
+    started = time.time()
+    jobs = {
+        "study_plan": build_study_plan_payload,
+        "flashcards": build_flashcards_payload,
+        "courses_info": build_courses_info_payload,
+    }
+    results = {}
+    for key, builder in jobs.items():
+        try:
+            payload = builder()
+            _ai_cache_set(key, payload)
+            results[key] = "ok"
+        except Exception as e:
+            print(f"Cron warm failed for {key}: {e}")
+            results[key] = f"error: {e}"
+
+    return {
+        "status": "success",
+        "message": "AI cache warm finished.",
+        "elapsed_sec": round(time.time() - started, 2),
+        "cache_ttl_sec": AI_CACHE_TTL_SEC,
+        "results": results,
+    }
+
+@app.post("/api/cron/reminders")
+def cron_assignment_reminders(
+    authorization: Optional[str] = Header(None),
+    x_cron_secret: Optional[str] = Header(None),
+):
+    require_cron_secret(authorization, x_cron_secret)
+    settings = load_settings()
+    should_send, reason = should_send_scheduled_reminder(settings)
+    interval_hours = notify_check_interval_hours(settings.get("notify_remind_hours", 24))
+
+    if not should_send:
         return {
-            "status": "success",
-            "message": f"Sent reminder for {len(due_soon)} assignment(s).",
-            "sent": True,
-            "assignment_count": len(due_soon),
-            "details": result,
+            "status": "skipped",
+            "sent": False,
+            "reason": reason,
+            "notify_check_interval_hours": interval_hours,
+        }
+
+    try:
+        result = dispatch_assignment_reminders(settings)
+        result["cron_reason"] = reason
+        result["notify_check_interval_hours"] = interval_hours
+        return result
+    except HTTPException as e:
+        return {
+            "status": "skipped",
+            "sent": False,
+            "reason": e.detail,
+            "notify_check_interval_hours": interval_hours,
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -323,32 +477,28 @@ def send_assignment_reminders():
         print(f"ntfy Error: {e}")
         raise HTTPException(status_code=502, detail="Could not reach ntfy. Check your topic and internet connection.")
 
-@app.get("/api/study_plan")
-def get_study_plan():
+def build_study_plan_payload():
     courses = get_active_courses()
     assignments = get_all_upcoming_assignments(courses)
-    
-    # Grab the 3 most urgent tasks so we don't overwhelm the AI (or you)
     top_tasks = assignments[:3]
-    
+
     if not top_tasks:
         return {"status": "success", "plan": []}
-        
-    # If you have a Gemini Key, generate real plans based on the rubrics
+
     if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY":
         try:
             client = genai.Client(api_key=GEMINI_API_KEY)
             settings = load_settings()
             custom_instructions = (settings.get("study_prompt") or DEFAULT_STUDY_PROMPT).strip()
-            
+
             prompt = f"""
             {custom_instructions}
 
             Analyze these {len(top_tasks)} upcoming assignments and their descriptions written by the professor.
-            
+
             Assignments:
             {json.dumps([{"title": t["title"], "course": t["course"], "description": t["description"], "hours_left": t["hours_left"]} for t in top_tasks])}
-            
+
             Respond ONLY with a valid JSON array of objects.
             Format:
             [
@@ -360,21 +510,18 @@ def get_study_plan():
               }}
             ]
             """
-            
-            # Force the model to return raw JSON
+
             response = client.models.generate_content(
                 model='gemini-3.1-flash-lite',
                 contents=prompt,
                 config={"response_mime_type": "application/json"}
             )
-            
+
             plan_data = json.loads(response.text.strip())
             return {"status": "success", "plan": plan_data}
         except Exception as e:
             print(f"Gemini API Error: {e}")
-            pass # Fallback to mock data if API fails
-            
-    # Mock Fallback Data (If no API key is provided)
+
     mock_plan = []
     for t in top_tasks:
         mock_plan.append({
@@ -385,20 +532,22 @@ def get_study_plan():
         })
     return {"status": "success", "plan": mock_plan}
 
+@app.get("/api/study_plan")
+def get_study_plan():
+    cached = _ai_cache_get("study_plan")
+    if cached:
+        return cached
+    payload = build_study_plan_payload()
+    _ai_cache_set("study_plan", payload)
+    return payload
+
 @app.get("/courses")
 def serve_courses():
     with open("courses.html", "r") as f:
         return HTMLResponse(content=f.read())
 
-@app.get("/api/courses_info")
-def get_courses_info():
-    import re
-    import json
-    
-    # 1. Fetch active courses
+def build_courses_info_payload():
     courses = get_active_courses()
-    
-    # 2. Fetch syllabus body for each course
     courses_dict = {}
     for c in courses:
         url = f"{BASE_URL}/courses/{c['id']}"
@@ -407,22 +556,19 @@ def get_courses_info():
         if response.status_code == 200:
             data = response.json()
             raw_syllabus = data.get("syllabus_body") or ""
-            # Strip HTML tags to save tokens
-            clean_syllabus = re.sub('<[^<]+>', '', raw_syllabus)[:1500] 
+            clean_syllabus = re.sub('<[^<]+>', '', raw_syllabus)[:1500]
             courses_dict[c["name"]] = {
                 "syllabus": clean_syllabus,
                 "upcoming": []
             }
-    
-    # 3. Attach upcoming assignments to give Gemini context
+
     assignments = get_all_upcoming_assignments(courses)
     for a in assignments:
         if a["course"] in courses_dict:
             courses_dict[a["course"]]["upcoming"].append(a["title"])
-            
+
     prompt_data = [{"course": k, "syllabus": v["syllabus"], "upcoming": v["upcoming"]} for k, v in courses_dict.items()]
-    
-    # 4. Ask Gemini 3.1 Flash Lite to extract grading policies and build study plans
+
     if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY":
         try:
             client = genai.Client(api_key=GEMINI_API_KEY)
@@ -431,9 +577,9 @@ def get_courses_info():
             Provide:
             1. study_bullets: 2-3 highly specific, actionable bullet points on what to study or prioritize right now based on the assignments and syllabus context.
             2. grading_policy: A concise 1-2 sentence summary of the grading weights/policy (e.g., 'Exams are 40%, Homework is 20%'). If not found in the syllabus text, say "Grading policy not explicitly detailed in the Canvas syllabus."
-            
+
             Data: {json.dumps(prompt_data)}
-            
+
             Respond ONLY with a valid JSON array of objects matching this exact format:
             [
               {{
@@ -443,7 +589,7 @@ def get_courses_info():
               }}
             ]
             """
-            
+
             response = client.models.generate_content(
                 model='gemini-3.1-flash-lite',
                 contents=prompt,
@@ -451,15 +597,14 @@ def get_courses_info():
                     "response_mime_type": "application/json"
                 }
             )
-            
+
             plan_data = json.loads(response.text.strip())
             return {"status": "success", "courses_info": plan_data}
         except Exception as e:
             print(f"Gemini API Error: {e}")
-            
-    # 5. Fallback Mock Data in case of failure
+
     return {
-        "status": "success", 
+        "status": "success",
         "courses_info": [
             {
                 "course": c["name"],
@@ -468,6 +613,15 @@ def get_courses_info():
             } for c in courses
         ]
     }
+
+@app.get("/api/courses_info")
+def get_courses_info():
+    cached = _ai_cache_get("courses_info")
+    if cached:
+        return cached
+    payload = build_courses_info_payload()
+    _ai_cache_set("courses_info", payload)
+    return payload
 
 @app.get("/api/feed")
 def get_feed():
@@ -481,30 +635,27 @@ def get_grades():
     grades = get_course_grades(courses)
     return {"status": "success", "grades": grades}
 
-@app.get("/api/flashcards")
-def get_flashcards():
+def build_flashcards_payload():
     courses = get_active_courses()
     assignments = get_all_upcoming_assignments(courses)
-    
-    # One sticky-note flashcard deck per upcoming assignment (cap at 6 so the page stays snappy)
     top_tasks = assignments[:6]
-    
+
     if not top_tasks:
         return {"status": "success", "flashcards": []}
-    
+
     if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY":
         try:
             client = genai.Client(api_key=GEMINI_API_KEY)
-            
+
             prompt = f"""
             You are an expert study coach. For each of these {len(top_tasks)} assignments, write exactly 3 flashcards
             (a short question on the front, a concise answer on the back) that would genuinely help a student prepare,
             based on the assignment title, course, and the professor's description. Focus on key terms, likely concepts,
             or things worth reviewing before starting.
-            
+
             Assignments:
             {json.dumps([{"title": t["title"], "course": t["course"], "description": t["description"]} for t in top_tasks])}
-            
+
             Respond ONLY with a valid JSON array of objects.
             Format:
             [
@@ -519,20 +670,18 @@ def get_flashcards():
               }}
             ]
             """
-            
+
             response = client.models.generate_content(
                 model='gemini-3.1-flash-lite',
                 contents=prompt,
                 config={"response_mime_type": "application/json"}
             )
-            
+
             deck_data = json.loads(response.text.strip())
             return {"status": "success", "flashcards": deck_data}
         except Exception as e:
             print(f"Gemini API Error (flashcards): {e}")
-            pass # Fallback to mock data if API fails
-    
-    # Mock Fallback Data (if no API key or the request failed)
+
     mock_decks = []
     for t in top_tasks:
         mock_decks.append({
@@ -545,6 +694,15 @@ def get_flashcards():
             ]
         })
     return {"status": "success", "flashcards": mock_decks}
+
+@app.get("/api/flashcards")
+def get_flashcards():
+    cached = _ai_cache_get("flashcards")
+    if cached:
+        return cached
+    payload = build_flashcards_payload()
+    _ai_cache_set("flashcards", payload)
+    return payload
 
 # Run server
 if __name__ == "__main__":

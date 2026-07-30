@@ -1,0 +1,12 @@
+# Guino scheduled jobs — copy into crontab -e and adjust paths/env.
+# Requires: GUINO_BASE_URL, CRON_SECRET (same value as in server .env)
+
+SHELL=/bin/bash
+GUINO_BASE_URL=https://your-guino-host.example
+CRON_SECRET=your_long_random_secret
+
+# Warm AI cache (Canvas + Gemini) every 15 minutes
+*/15 * * * * GUINO_BASE_URL=$GUINO_BASE_URL CRON_SECRET=$CRON_SECRET /path/to/Guino/scripts/cron/warm.sh >> /tmp/guino-cron-warm.log 2>&1
+
+# Check assignment reminders hourly; send interval follows Settings → "due within" (12h→every 3h, 24h→6h, 48h→12h, 72h→18h)
+0 * * * * GUINO_BASE_URL=$GUINO_BASE_URL CRON_SECRET=$CRON_SECRET /path/to/Guino/scripts/cron/reminders.sh >> /tmp/guino-cron-reminders.log 2>&1
