@@ -274,6 +274,15 @@ def get_course_grades(courses):
 
 # --- API ENDPOINTS ---
 
+@app.get("/api/health")
+def health_check():
+    """Lightweight ping for uptime monitors and Render keep-alive cron."""
+    return {
+        "status": "ok",
+        "service": "guino",
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+
 @app.get("/")
 def serve_landing():
     with open("landing.html", "r") as f:

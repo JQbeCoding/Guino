@@ -1,9 +1,12 @@
 # Guino scheduled jobs — copy into crontab -e and adjust paths/env.
-# Requires: GUINO_BASE_URL, CRON_SECRET (same value as in server .env)
+# Requires: GUINO_BASE_URL. Warm/reminders also need CRON_SECRET (same as server .env).
 
 SHELL=/bin/bash
-GUINO_BASE_URL=https://your-guino-host.example
+GUINO_BASE_URL=https://your-guino-host.onrender.com
 CRON_SECRET=your_long_random_secret
+
+# Keep Render (or similar) from sleeping — lightweight ping every 10 minutes
+*/10 * * * * GUINO_BASE_URL=$GUINO_BASE_URL /path/to/Guino/scripts/cron/keepalive.sh >> /tmp/guino-cron-keepalive.log 2>&1
 
 # Warm AI cache (Canvas + Gemini) every 15 minutes
 */15 * * * * GUINO_BASE_URL=$GUINO_BASE_URL CRON_SECRET=$CRON_SECRET /path/to/Guino/scripts/cron/warm.sh >> /tmp/guino-cron-warm.log 2>&1
