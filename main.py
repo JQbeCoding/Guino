@@ -13,7 +13,7 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo
 
-load_dotenv()  # Reads variables from a local .env file (see .env.example)
+load_dotenv()
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -21,8 +21,6 @@ app.mount("/assets/penguin", StaticFiles(directory="penguin/source"), name="peng
 app.mount("/assets/igloo", StaticFiles(directory="igloo"), name="igloo")
 app.mount("/assets/snow_mountain", StaticFiles(directory="snow_mountain"), name="snow_mountain")
 
-# --- GUINO CONFIG ---
-# Secrets and environment-specific values live in .env (never commit that file).
 ACCESS_TOKEN = os.environ.get("CANVAS_ACCESS_TOKEN", "")
 BASE_URL = os.environ.get("CANVAS_BASE_URL", "https://instructure.charlotte.edu/api/v1")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -48,7 +46,6 @@ def load_settings():
             with open(SETTINGS_FILE, "r") as f:
                 saved = json.load(f)
                 merged = {**DEFAULT_SETTINGS, **saved}
-                # Migrate older Twilio/SMS settings if present
                 if saved.get("sms_enabled") and not saved.get("ntfy_enabled"):
                     merged["ntfy_enabled"] = saved["sms_enabled"]
                 if saved.get("sms_remind_hours") and "notify_remind_hours" not in saved:

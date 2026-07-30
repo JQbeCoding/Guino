@@ -10,16 +10,64 @@ const MENU_ITEMS = [
     { label: 'Settings', href: '/settings', id: 'settings' },
 ];
 
-const SCREEN_W = 1024;
-const SCREEN_H = 768;
-const MENU_START_Y = 260;
-const MENU_ROW_H = 72;
-const MENU_X = 100;
-const MENU_W = 824;
+// 3D projector screen in scene units (position + plane size + bezel).
+const PROJECTOR_SCREEN = {
+    x: 0,
+    y: 1.65,
+    z: -3.8,
+    width: 5.8,
+    height: 3.3,
+    frame: 0.045,
+};
+
+// UI is drawn on a canvas texture mapped onto that plane — same aspect ratio, no stretch.
+const UI_PX_PER_WORLD_UNIT = 200;
+const UI_CANVAS_WIDTH = PROJECTOR_SCREEN.width * UI_PX_PER_WORLD_UNIT;
+const UI_CANVAS_HEIGHT = PROJECTOR_SCREEN.height * UI_PX_PER_WORLD_UNIT;
+
+// Menu layout (original tuning at 1024×768); scaled to the UI canvas above.
+const UI_REF = { width: 1024, height: 768 };
+const MENU_LAYOUT = {
+    x: UI_CANVAS_WIDTH * (100 / UI_REF.width),
+    width: UI_CANVAS_WIDTH * (824 / UI_REF.width),
+    promptY: UI_CANVAS_HEIGHT * (200 / UI_REF.height),
+    startY: UI_CANVAS_HEIGHT * (260 / UI_REF.height),
+    rowHeight: UI_CANVAS_HEIGHT * (72 / UI_REF.height),
+    rowHitInset: 10,
+};
+
 const TRANSITION_MS = 1400;
-const SCREEN_LAYOUT = { x: 0, y: 1.65, z: -3.8, w: 5.8, h: 3.3, frame: 0.18 };
 
 const isDark = localStorage.getItem('guino_theme') === 'dark';
+
+/** Colors for the projected OS menu (canvas texture). Dark theme = higher contrast / luminance. */
+const SCREEN_UI = isDark
+    ? {
+        bg: '#0D1117',
+        header: '#2a3340',
+        title: '#FFC857',
+        text: '#FFFFFF',
+        textMuted: '#B8D0E4',
+        accent: '#FFC857',
+        border: '#7A9BB8',
+        hoverFill: 'rgba(255, 200, 87, 0.28)',
+        panelGlowCenter: 'rgba(200, 230, 255, 0.16)',
+        panelGlowMid: 'rgba(120, 180, 230, 0.07)',
+    }
+    : {
+        bg: '#0D1117',
+        header: '#1C1C1C',
+        title: '#F4A227',
+        text: '#F5F5F0',
+        textMuted: '#5C6B73',
+        accent: '#F4A227',
+        border: '#5C6B73',
+        hoverFill: '#F4A22733',
+        panelGlowCenter: null,
+        panelGlowMid: null,
+    };
+
+const SCREEN_DISPLAY_GAIN = isDark ? new THREE.Color(1.45, 1.48, 1.58) : new THREE.Color(1, 1, 1);
 
 const canvas = document.getElementById('scene');
 const fallback = document.getElementById('webgl-fallback');
@@ -47,8 +95,8 @@ scene.fog = new THREE.FogExp2(isDark ? 0x0a1628 : 0xb8d4e8, isDark ? 0.045 : 0.0
 const workspace = new THREE.Group();
 scene.add(workspace);
 
-const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 80);
-camera.position.set(0, 1.35, 3.6);
+const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 1000);
+
 
 const controls = new OrbitControls(camera, canvas);
 controls.enablePan = false;
@@ -105,10 +153,10 @@ function setupPenguin(root) {
 
 function placePenguin(penguinGltf) {
     const wrap = new THREE.Group();
-    const s = SCREEN_LAYOUT;
+    const s = PROJECTOR_SCREEN;
     // Bottom-right corner of the screen, feet on the snow
     wrap.position.set(
-        s.x + s.w / 2 + s.frame * 0.4 - 0.25,
+        s.x + s.width / 2 + s.frame * 0.4 - 0.25,
         0,
         s.z + 0.5
     );
@@ -132,8 +180,8 @@ function placePenguin(penguinGltf) {
 // --- Canvas UI ---
 
 const screenCanvas = document.createElement('canvas');
-screenCanvas.width = SCREEN_W;
-screenCanvas.height = SCREEN_H;
+screenCanvas.width = UI_CANVAS_WIDTH;
+screenCanvas.height = UI_CANVAS_HEIGHT;
 const screenCtx = screenCanvas.getContext('2d');
 const screenTexture = new THREE.CanvasTexture(screenCanvas);
 screenTexture.colorSpace = THREE.SRGBColorSpace;
@@ -143,105 +191,128 @@ let defaultCameraPos = camera.position.clone();
 let defaultTarget = new THREE.Vector3(0, 1.55, -2.5);
 
 function getMenuRects() {
+    const m = MENU_LAYOUT;
     return MENU_ITEMS.map((item, i) => ({
         ...item,
-        x: MENU_X,
-        y: MENU_START_Y + i * MENU_ROW_H,
-        w: MENU_W,
-        h: MENU_ROW_H - 10,
+        x: m.x,
+        y: m.startY + i * m.rowHeight,
+        w: m.width,
+        h: m.rowHeight - m.rowHitInset,
     }));
 }
 
 function drawScreenBackground(ctx) {
-    ctx.fillStyle = '#0D1117';
-    ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    ctx.fillStyle = '#1C1C1C';
-    ctx.fillRect(0, 0, SCREEN_W, 56);
-    ctx.fillStyle = '#F4A227';
+    const ui = SCREEN_UI;
+    ctx.fillStyle = ui.bg;
+    ctx.fillRect(0, 0, UI_CANVAS_WIDTH, UI_CANVAS_HEIGHT);
+
+    if (ui.panelGlowCenter) {
+        const cx = UI_CANVAS_WIDTH * 0.42;
+        const cy = UI_CANVAS_HEIGHT * 0.48;
+        const r = Math.max(UI_CANVAS_WIDTH, UI_CANVAS_HEIGHT) * 0.58;
+        const glow = ctx.createRadialGradient(cx, cy, r * 0.08, cx, cy, r);
+        glow.addColorStop(0, ui.panelGlowCenter);
+        glow.addColorStop(0.45, ui.panelGlowMid);
+        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, UI_CANVAS_WIDTH, UI_CANVAS_HEIGHT);
+    }
+
+    ctx.fillStyle = ui.header;
+    ctx.fillRect(0, 0, UI_CANVAS_WIDTH, 56);
+    ctx.fillStyle = ui.title;
     ctx.font = 'bold 22px monospace';
     ctx.fillText('Guino OS v1.0', 24, 36);
-    ctx.strokeStyle = '#5C6B73';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(8, 8, SCREEN_W - 16, SCREEN_H - 16);
+    ctx.strokeStyle = ui.border;
+    ctx.lineWidth = isDark ? 2.5 : 2;
+    ctx.strokeRect(8, 8, UI_CANVAS_WIDTH - 16, UI_CANVAS_HEIGHT - 16);
 }
 
 function drawMenu(ctx, hoverIndex) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
     ctx.font = 'bold 28px monospace';
-    ctx.fillStyle = '#5C6B73';
-    ctx.fillText('Select a destination:', MENU_X, 200);
+    ctx.fillStyle = ui.textMuted;
+    ctx.fillText('Select a destination:', MENU_LAYOUT.x, MENU_LAYOUT.promptY);
     getMenuRects().forEach((item, i) => {
         const hovered = i === hoverIndex;
         if (hovered) {
-            ctx.fillStyle = '#F4A22733';
+            ctx.fillStyle = ui.hoverFill;
             ctx.fillRect(item.x - 8, item.y - 4, item.w + 16, item.h + 8);
-            ctx.strokeStyle = '#F4A227';
+            ctx.strokeStyle = ui.accent;
             ctx.lineWidth = 2;
             ctx.strokeRect(item.x - 8, item.y - 4, item.w + 16, item.h + 8);
         }
-        ctx.fillStyle = hovered ? '#F4A227' : '#F5F5F0';
+        ctx.fillStyle = hovered ? ui.accent : ui.text;
         ctx.font = `${hovered ? 'bold ' : ''}32px monospace`;
+        ctx.shadowColor = isDark ? 'rgba(255, 220, 160, 0.45)' : 'transparent';
+        ctx.shadowBlur = isDark ? (hovered ? 14 : 6) : 0;
         ctx.fillText(hovered ? '> ' + item.label : '  ' + item.label, item.x, item.y + 40);
+        ctx.shadowBlur = 0;
     });
-    ctx.fillStyle = '#5C6B73';
+    ctx.fillStyle = ui.textMuted;
     ctx.font = '18px monospace';
-    ctx.fillText('Click to launch', MENU_X, SCREEN_H - 48);
+    ctx.fillText('Click to launch', MENU_LAYOUT.x, UI_CANVAS_HEIGHT - 48);
 }
 
 function drawDashboardTransition(ctx, t) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.font = 'bold 26px monospace';
     ctx.fillText('Loading feed...', 80, 120);
     ['● Cloud Computing Lab — Due Fri', '● Data Structures HW — Due Mon', '● Systems Project — Due Wed'].forEach((line, i) => {
-        ctx.fillStyle = i === 0 ? '#F4A227' : '#F5F5F0';
+        ctx.fillStyle = i === 0 ? ui.accent : ui.text;
         ctx.font = '22px monospace';
         ctx.fillText(line, 80, 200 + i * 56 - (t * 180 % 200));
     });
-    ctx.fillStyle = '#F4A227';
+    ctx.fillStyle = ui.accent;
     ctx.fillRect(80, 560, Math.min(1, t * 1.4) * 600, 12);
 }
 
 function drawCoursesTransition(ctx, t) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.font = 'bold 26px monospace';
     ctx.fillText('Opening courses...', 80, 100);
     [180, 340, 500].forEach((x, i) => {
         const slide = Math.min(1, Math.max(0, (t - i * 0.15) * 2));
-        ctx.fillStyle = ['#F4A227', '#5C6B73', '#F5F5F0'][i];
+        ctx.fillStyle = [ui.accent, ui.textMuted, ui.text][i];
         ctx.fillRect(x, 400 - slide * 220, 100, 140);
     });
 }
 
 function drawGpaTransition(ctx, t) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.font = 'bold 26px monospace';
     ctx.fillText('Calculating grades...', 80, 100);
     [0.88, 0.92, 0.78].forEach((h, i) => {
         const x = 160 + i * 200;
         const grow = Math.min(1, Math.max(0, (t - i * 0.12) * 1.8));
-        ctx.fillStyle = '#F4A227';
+        ctx.fillStyle = ui.accent;
         ctx.fillRect(x, 420 - 280 * h * grow, 80, 280 * h * grow);
     });
 }
 
 function drawStudyTransition(ctx, t) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.font = 'bold 26px monospace';
     ctx.fillText('Preparing flashcards...', 80, 100);
     const angle = Math.min(Math.PI, t * Math.PI * 1.2);
     ctx.save();
-    ctx.translate(SCREEN_W / 2, 340);
+    ctx.translate(UI_CANVAS_WIDTH / 2, 340);
     ctx.scale(Math.cos(angle), 1);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.fillRect(-160, -100, 320, 200);
-    ctx.strokeStyle = '#F4A227';
+    ctx.strokeStyle = ui.accent;
     ctx.lineWidth = 3;
     ctx.strokeRect(-160, -100, 320, 200);
-    ctx.fillStyle = '#1C1C1C';
+    ctx.fillStyle = ui.bg;
     ctx.font = '22px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(angle < Math.PI / 2 ? 'What is cloud elasticity?' : 'Auto-scaling resources', 0, 10);
@@ -249,14 +320,15 @@ function drawStudyTransition(ctx, t) {
 }
 
 function drawSettingsTransition(ctx, t) {
+    const ui = SCREEN_UI;
     drawScreenBackground(ctx);
-    ctx.fillStyle = '#F5F5F0';
+    ctx.fillStyle = ui.text;
     ctx.font = 'bold 26px monospace';
     ctx.fillText('Applying preferences...', 80, 100);
     ctx.save();
-    ctx.translate(SCREEN_W / 2, 340);
+    ctx.translate(UI_CANVAS_WIDTH / 2, 340);
     ctx.rotate(t * Math.PI * 3);
-    ctx.fillStyle = '#F4A227';
+    ctx.fillStyle = ui.accent;
     ctx.beginPath();
     for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
@@ -279,10 +351,10 @@ const TRANSITION_DRAWERS = {
 
 function buildProjectorScreen() {
     const group = new THREE.Group();
-    group.position.set(SCREEN_LAYOUT.x, SCREEN_LAYOUT.y, SCREEN_LAYOUT.z);
+    group.position.set(PROJECTOR_SCREEN.x, PROJECTOR_SCREEN.y, PROJECTOR_SCREEN.z);
 
-    const screenW = SCREEN_LAYOUT.w;
-    const screenH = SCREEN_LAYOUT.h;
+    const screenW = PROJECTOR_SCREEN.width;
+    const screenH = PROJECTOR_SCREEN.height;
     const frameMat = new THREE.MeshStandardMaterial({
         color: 0xd8eef8,
         roughness: 0.25,
@@ -292,7 +364,7 @@ function buildProjectorScreen() {
     });
 
     const frameDepth = 0.12;
-    const frameThick = SCREEN_LAYOUT.frame;
+    const frameThick = PROJECTOR_SCREEN.frame;
     const frames = [
         [screenW + frameThick * 2, frameThick, frameDepth, 0, screenH / 2 + frameThick / 2, 0],
         [screenW + frameThick * 2, frameThick, frameDepth, 0, -screenH / 2 - frameThick / 2, 0],
@@ -307,7 +379,11 @@ function buildProjectorScreen() {
 
     const screen = new THREE.Mesh(
         new THREE.PlaneGeometry(screenW, screenH),
-        new THREE.MeshBasicMaterial({ map: screenTexture, toneMapped: false })
+        new THREE.MeshBasicMaterial({
+            map: screenTexture,
+            toneMapped: false,
+            color: SCREEN_DISPLAY_GAIN,
+        })
     );
     screen.name = 'monitorScreen';
     screen.position.z = 0.02;
@@ -398,7 +474,7 @@ async function buildScene() {
     workspace.add(screenGroup);
     screenMesh = screen;
 
-    const screenWorld = new THREE.Vector3(SCREEN_LAYOUT.x, SCREEN_LAYOUT.y, SCREEN_LAYOUT.z);
+    const screenWorld = new THREE.Vector3(PROJECTOR_SCREEN.x, PROJECTOR_SCREEN.y, PROJECTOR_SCREEN.z);
     const projectorOrigin = new THREE.Vector3(-1.35, 0.1, 0.45);
     workspace.add(buildProjectorBeam(projectorOrigin, screenWorld));
 
@@ -429,8 +505,8 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 function hitTestMenu(u, v) {
-    const x = u * SCREEN_W;
-    const y = (1 - v) * SCREEN_H;
+    const x = u * UI_CANVAS_WIDTH;
+    const y = (1 - v) * UI_CANVAS_HEIGHT;
     for (let i = 0; i < getMenuRects().length; i++) {
         const r = getMenuRects()[i];
         if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;

@@ -24,16 +24,24 @@
 </head>
 <body class="bg-glacialBlue dark:bg-nightIce min-h-screen text-penguinBlack dark:text-penguinBelly font-sans selection:bg-penguinBeak selection:text-white transition-colors">
 
-    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg sticky top-0 z-40">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-black tracking-tight"><a href="/" data-guino-return class="hover:text-penguinBeak transition-colors"><span class="text-penguinBeak">G</span>uino</a></h1>
-            <div class="space-x-1 sm:space-x-4 font-medium text-sm sm:text-base">
-                <a href="/" data-guino-return class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Ice Scene</a>
-                <a href="/dashboard" class="px-3 py-1 rounded bg-penguinBeak text-penguinBlack hover:animate-waddle transition-colors inline-block">Dashboard</a>
-                <a href="/courses" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Courses</a>
-                <a href="/gpa" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">GPA</a>
-                <a href="/study" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Study</a>
-                <a href="/settings" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Settings</a>
+    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg sticky top-0 z-40 relative" data-guino-nav>
+        <div class="max-w-4xl mx-auto flex justify-between items-center gap-3">
+            <h1 class="text-2xl font-black tracking-tight shrink-0"><a href="/" data-guino-return class="hover:text-penguinBeak transition-colors"><span class="text-penguinBeak">G</span>uino</a></h1>
+            <button type="button" class="md:hidden p-2 rounded hover:bg-slateGray transition-colors shrink-0" aria-expanded="false" aria-controls="guino-nav-menu" data-guino-nav-toggle>
+                <svg data-guino-nav-icon-menu class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+                <svg data-guino-nav-icon-close class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+            <div id="guino-nav-menu" class="hidden md:flex md:items-center md:space-x-4 font-medium text-sm md:text-base absolute md:relative top-full left-0 right-0 md:top-auto md:left-auto md:right-auto bg-penguinBlack border-t border-slateGray/40 md:border-0 shadow-lg md:shadow-none p-3 md:p-0 flex-col md:flex-row gap-0.5 md:gap-0 z-50" data-guino-nav-panel>
+                <a href="/" data-guino-return class="px-3 py-2.5 md:py-1 rounded hover:bg-slateGray transition-colors block md:inline-block">Ice Scene</a>
+                <span class="px-3 py-2.5 md:py-1 rounded bg-penguinBeak text-penguinBlack block md:inline-block cursor-default">Dashboard</span>
+                <a href="/courses" class="px-3 py-2.5 md:py-1 rounded hover:bg-slateGray transition-colors block md:inline-block">Courses</a>
+                <a href="/gpa" class="px-3 py-2.5 md:py-1 rounded hover:bg-slateGray transition-colors block md:inline-block">GPA</a>
+                <a href="/study" class="px-3 py-2.5 md:py-1 rounded hover:bg-slateGray transition-colors block md:inline-block">Study</a>
+                <a href="/settings" class="px-3 py-2.5 md:py-1 rounded hover:bg-slateGray transition-colors block md:inline-block">Settings</a>
             </div>
         </div>
     </nav>
@@ -162,6 +170,7 @@
             loadAssignments();
         };
     </script>
+    <script src="/static/app-nav.js"></script>
     <script src="/static/return-scene.js"></script>
 </body>
 </html>
