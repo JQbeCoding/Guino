@@ -1,0 +1,11 @@
+Model Information:
+* title:	Snow Mountain
+* source:	https://sketchfab.com/3d-models/snow-mountain-aa3ccbb5940d43ffab435a6b7fe7c69d
+* author:	pravin9152600513 (https://sketchfab.com/pravin9152600513)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Snow Mountain" (https://sketchfab.com/3d-models/snow-mountain-aa3ccbb5940d43ffab435a6b7fe7c69d) by pravin9152600513 (https://sketchfab.com/pravin9152600513) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

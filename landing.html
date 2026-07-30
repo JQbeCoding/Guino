@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guino — Welcome</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        penguinBlack: '#1C1C1C',
+                        penguinBelly: '#F5F5F0',
+                        penguinBeak: '#F4A227',
+                        glacialBlue: '#E8F1F5',
+                        slateGray: '#5C6B73',
+                        nightIce: '#0D1117'
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+        if (localStorage.getItem('guino_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+    <style>
+        html, body { margin: 0; overflow: hidden; height: 100%; }
+        #scene { display: block; width: 100vw; height: 100vh; }
+        #overlay { pointer-events: none; }
+        #overlay a, #overlay button { pointer-events: auto; }
+        #webgl-fallback { display: none; }
+        #loading { transition: opacity 0.4s ease; }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body class="bg-glacialBlue dark:bg-nightIce text-penguinBlack dark:text-penguinBelly font-sans">
+
+    <canvas id="scene"></canvas>
+
+    <div id="overlay" class="fixed inset-0 z-10 flex flex-col justify-between p-4 sm:p-6">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight drop-shadow-sm">
+                <span class="text-penguinBeak">G</span>uino
+            </h1>
+            <p class="text-sm sm:text-base text-slateGray dark:text-penguinBelly/70 mt-1 max-w-sm">
+                Quis is projecting the app — click a link on the ice screen.
+            </p>
+        </div>
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <a href="/dashboard"
+               class="bg-penguinBeak text-penguinBlack font-bold py-2 px-5 rounded-md shadow-[3px_3px_0px_0px_rgba(28,28,28,1)] hover:translate-y-0.5 hover:translate-x-0.5 hover:shadow-none transition-all text-sm">
+                Skip to app &rarr;
+            </a>
+            <p class="text-xs text-slateGray dark:text-penguinBelly/50 hidden sm:block">
+                Drag to look around
+            </p>
+            <div class="flex gap-4 mt-2 sm:mt-0">
+                <a href="/privacy" class="text-xs text-slateGray dark:text-penguinBelly/50 hover:text-penguinBeak">Privacy</a>
+                <a href="/terms" class="text-xs text-slateGray dark:text-penguinBelly/50 hover:text-penguinBeak">Terms</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="fixed inset-0 z-30 flex flex-col items-center justify-center bg-glacialBlue dark:bg-nightIce">
+        <p class="text-lg font-bold animate-pulse">Setting up the ice projector...</p>
+        <p class="text-sm text-slateGray dark:text-penguinBelly/60 mt-2">Loading North Pole scene</p>
+    </div>
+
+    <div id="webgl-fallback" class="fixed inset-0 z-20 flex flex-col items-center justify-center bg-glacialBlue dark:bg-nightIce p-8 text-center">
+        <p class="text-xl font-bold mb-4">WebGL isn't available in this browser.</p>
+        <a href="/dashboard" class="bg-penguinBeak text-penguinBlack font-bold py-2 px-6 rounded-md">Go to Dashboard</a>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="/static/landing-scene.js"></script>
+</body>
+</html>

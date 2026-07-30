@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guino AI Study Plan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { penguinBlack: '#1C1C1C', penguinBelly: '#F5F5F0', penguinBeak: '#F4A227', glacialBlue: '#E8F1F5', slateGray: '#5C6B73', nightIce: '#0D1117' },
+                    animation: { 'waddle': 'waddle 0.5s ease-in-out infinite alternate', 'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' },
+                    keyframes: { waddle: { '0%': { transform: 'rotate(-5deg) translateY(0)' }, '100%': { transform: 'rotate(5deg) translateY(-2px)' } } }
+                }
+            }
+        }
+    </script>
+    <script>
+        if (localStorage.getItem('guino_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+    <style>
+        .flip-card { perspective: 1000px; }
+        .flip-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back {
+            position: absolute;
+            inset: 0;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .flip-card-back { transform: rotateY(180deg); }
+    </style>
+</head>
+<body class="bg-glacialBlue dark:bg-nightIce min-h-screen text-penguinBlack dark:text-penguinBelly font-sans selection:bg-penguinBeak selection:text-white transition-colors">
+
+    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-black tracking-tight"><a href="/" data-guino-return class="hover:text-penguinBeak transition-colors"><span class="text-penguinBeak">G</span>uino</a></h1>
+            <div class="space-x-1 sm:space-x-4 font-medium text-sm sm:text-base">
+                <a href="/" data-guino-return class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Ice Scene</a>
+                <a href="/dashboard" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Dashboard</a>
+                <a href="/courses" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Courses</a>
+                <a href="/gpa" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">GPA</a>
+                <button class="px-3 py-1 rounded bg-penguinBeak text-penguinBlack hover:animate-waddle transition-colors cursor-pointer">Study</button>
+                <a href="/settings" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto mt-10 p-4">
+        <div class="mb-8 border-b-2 border-slateGray/30 pb-4">
+            <h2 class="text-3xl font-bold">AI Action Plan.</h2>
+            <p class="text-slateGray mt-2" id="study-subtitle">Guino is analyzing your professor's instructions...</p>
+        </div>
+
+        <div id="ai-loading" class="flex flex-col items-center justify-center py-12">
+            <div class="w-16 h-16 bg-penguinBlack rounded-full flex items-center justify-center animate-pulse-fast shadow-xl">
+                <span class="text-2xl">🧠</span>
+            </div>
+            <p class="mt-4 font-bold text-slateGray animate-pulse">Reading Canvas rubrics and calculating timelines...</p>
+        </div>
+
+        <div id="study-container" class="grid grid-cols-1 gap-6 hidden">
+            <!-- AI Cards Injected Here -->
+        </div>
+
+        <div class="mt-14 mb-8 border-b-2 border-slateGray/30 pb-4">
+            <h2 class="text-3xl font-bold">📌 Flashcard Corkboard.</h2>
+            <p class="text-slateGray mt-2" id="flashcards-subtitle">Guino is pinning up flashcards for each assignment...</p>
+        </div>
+
+        <div id="flashcards-loading" class="flex flex-col items-center justify-center py-12">
+            <div class="w-16 h-16 bg-penguinBlack rounded-full flex items-center justify-center animate-pulse-fast shadow-xl">
+                <span class="text-2xl">🗂️</span>
+            </div>
+            <p class="mt-4 font-bold text-slateGray animate-pulse">Writing up sticky notes for each assignment...</p>
+        </div>
+
+        <div id="flashcards-container" class="space-y-10 hidden pb-10">
+            <!-- Flashcard decks injected here -->
+        </div>
+
+    </main>
+
+    <script>
+        async function loadStudyPlan() {
+            try {
+                const response = await fetch('/api/study_plan');
+                const data = await response.json();
+                
+                const container = document.getElementById('study-container');
+                const loader = document.getElementById('ai-loading');
+                const subtitle = document.getElementById('study-subtitle');
+                
+                loader.classList.add('hidden');
+                container.classList.remove('hidden');
+
+                if (!data.plan || data.plan.length === 0) {
+                    subtitle.innerText = "No urgent assignments found.";
+                    container.innerHTML = `<div class="text-center py-10 font-bold text-penguinBlack dark:text-penguinBelly text-xl">🎉 No study plan needed today!</div>`;
+                    return;
+                }
+
+                subtitle.innerText = `Generated execution strategies for your ${data.plan.length} most urgent tasks.`;
+
+                data.plan.forEach(plan => {
+                    const html = `
+                        <div class="bg-penguinBelly text-penguinBlack rounded-lg shadow-lg p-6 border-l-8 border-penguinBeak relative overflow-hidden group">
+                            <!-- Background Accent -->
+                            <div class="absolute -right-10 -top-10 text-9xl opacity-5 transform group-hover:scale-110 transition-transform duration-500 pointer-events-none">⏱️</div>
+                            
+                            <h3 class="text-2xl font-bold mb-1">${plan.title}</h3>
+                            
+                            <div class="flex items-center gap-2 mb-4">
+                                <span class="bg-penguinBlack text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                                    Est: ${plan.estimated_time || "TBD"}
+                                </span>
+                            </div>
+
+                            <div class="mb-6 bg-white p-4 rounded border border-slateGray/20 shadow-inner">
+                                <h4 class="text-sm font-bold text-slateGray uppercase tracking-wider mb-2">Guino's Recommendation</h4>
+                                <p class="text-penguinBlack font-medium italic text-lg leading-snug">"${plan.recommended_action || "Start working on this as soon as possible."}"</p>
+                            </div>
+                            
+                            <h4 class="font-bold mb-3 border-b-2 border-slateGray/20 pb-1 inline-block">Execution Steps</h4>
+                            <ul class="space-y-3">
+                                ${(plan.steps || []).map((step, idx) => `
+                                    <li class="flex items-start gap-3">
+                                        <div class="flex-shrink-0 w-6 h-6 rounded bg-penguinBeak text-penguinBlack flex items-center justify-center font-bold text-sm shadow">
+                                            ${idx + 1}
+                                        </div>
+                                        <span class="text-slateGray font-medium mt-0.5">${step}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+
+            } catch (e) {
+                console.error("UI Render Error:", e);
+                const loader = document.getElementById('ai-loading');
+                loader.classList.remove('hidden');
+                loader.innerHTML = `<div class="text-red-500 text-center font-bold mt-4">Failed to render AI plan. Check the console!</div>`;
+            }
+        }
+
+        const STICKY_COLORS = ["bg-yellow-100", "bg-pink-100", "bg-sky-100", "bg-lime-100"];
+        const STICKY_ROTATIONS = ["-rotate-2", "rotate-1", "-rotate-1", "rotate-2"];
+
+        function renderFlashcard(card, i) {
+            const color = STICKY_COLORS[i % STICKY_COLORS.length];
+            const rotate = STICKY_ROTATIONS[i % STICKY_ROTATIONS.length];
+            return `
+                <div class="flip-card w-full h-48 cursor-pointer transform ${rotate} hover:scale-105 hover:z-10 transition-transform duration-300" onclick="this.classList.toggle('flipped')">
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front ${color} rounded-sm shadow-lg p-5 border border-black/10 flex flex-col">
+                            <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-5 bg-white/60 backdrop-blur-sm rotate-1 border border-black/5"></div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-penguinBlack/50 mb-2">Question</span>
+                            <p class="font-serif text-penguinBlack font-semibold text-base leading-snug flex-1 overflow-y-auto">${card.front}</p>
+                            <span class="text-[10px] text-penguinBlack/40 mt-2 self-end">tap to flip ↻</span>
+                        </div>
+                        <div class="flip-card-back ${color} rounded-sm shadow-lg p-5 border border-black/10 flex flex-col">
+                            <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-5 bg-white/60 backdrop-blur-sm -rotate-1 border border-black/5"></div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-penguinBlack/50 mb-2">Answer</span>
+                            <p class="font-medium text-penguinBlack text-sm leading-snug flex-1 overflow-y-auto">${card.back}</p>
+                            <span class="text-[10px] text-penguinBlack/40 mt-2 self-end">tap to flip ↻</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadFlashcards() {
+            try {
+                const response = await fetch('/api/flashcards');
+                const data = await response.json();
+
+                const container = document.getElementById('flashcards-container');
+                const loader = document.getElementById('flashcards-loading');
+                const subtitle = document.getElementById('flashcards-subtitle');
+
+                loader.classList.add('hidden');
+                container.classList.remove('hidden');
+
+                if (!data.flashcards || data.flashcards.length === 0) {
+                    subtitle.innerText = "No assignments to make flashcards for right now.";
+                    container.innerHTML = `<div class="text-center py-10 font-bold text-penguinBlack dark:text-penguinBelly text-xl">🎉 The corkboard is empty!</div>`;
+                    return;
+                }
+
+                subtitle.innerText = `${data.flashcards.length} decks pinned up, one per upcoming assignment.`;
+
+                data.flashcards.forEach(deck => {
+                    const cardsHtml = (deck.cards || []).map((card, i) => renderFlashcard(card, i)).join('');
+                    const html = `
+                        <div>
+                            <div class="flex items-baseline gap-2 mb-4">
+                                <h3 class="text-xl font-bold">${deck.assignment}</h3>
+                                <span class="text-slateGray font-mono text-sm">${deck.course || ''}</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                ${cardsHtml}
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+            } catch (e) {
+                console.error("Flashcard Render Error:", e);
+                const loader = document.getElementById('flashcards-loading');
+                loader.classList.remove('hidden');
+                loader.innerHTML = `<div class="text-red-500 text-center font-bold mt-4">Failed to render flashcards. Check the console!</div>`;
+            }
+        }
+
+        async function applySettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                const settings = data.settings || {};
+                document.documentElement.classList.toggle('dark', settings.theme === 'dark');
+                localStorage.setItem('guino_theme', settings.theme || 'light');
+            } catch (e) {
+                console.error("Failed to load settings:", e);
+            }
+        }
+
+        window.onload = () => {
+            applySettings();
+            loadStudyPlan();
+            loadFlashcards();
+        };
+    </script>
+    <script src="/static/return-scene.js"></script>
+</body>
+</html>

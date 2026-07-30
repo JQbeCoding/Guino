@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guino Grades</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        penguinBlack: '#1C1C1C',
+                        penguinBelly: '#F5F5F0',
+                        penguinBeak: '#F4A227',
+                        glacialBlue: '#E8F1F5',
+                        slateGray: '#5C6B73',
+                        nightIce: '#0D1117'
+                    },
+                    animation: {
+                        'waddle': 'waddle 0.5s ease-in-out infinite alternate',
+                        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                    },
+                    keyframes: {
+                        waddle: {
+                            '0%': { transform: 'rotate(-5deg) translateY(0)' },
+                            '100%': { transform: 'rotate(5deg) translateY(-2px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+        if (localStorage.getItem('guino_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+</head>
+<body class="bg-glacialBlue dark:bg-nightIce min-h-screen text-penguinBlack dark:text-penguinBelly font-sans selection:bg-penguinBeak selection:text-white transition-colors">
+
+    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-black tracking-tight"><a href="/" data-guino-return class="hover:text-penguinBeak transition-colors"><span class="text-penguinBeak">G</span>uino</a></h1>
+            <div class="space-x-1 sm:space-x-4 font-medium text-sm sm:text-base">
+                <a href="/" data-guino-return class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Ice Scene</a>
+                <a href="/dashboard" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Dashboard</a>
+                <a href="/courses" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Courses</a>
+                <button class="px-3 py-1 rounded bg-penguinBeak text-penguinBlack hover:animate-waddle transition-colors cursor-pointer">GPA</button>
+                <a href="/study" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Study</a>
+                <a href="/settings" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto mt-10 p-4">
+        <div class="mb-8 border-b-2 border-slateGray/30 pb-4">
+            <h2 class="text-3xl font-bold">Academic Performance.</h2>
+            <p class="text-slateGray mt-2" id="grades-subtitle">Fetching your current standings...</p>
+        </div>
+
+        <!-- Grades Grid Container -->
+        <div id="grades-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="col-span-full text-center py-10 animate-pulse-slow font-bold text-slateGray">Gathering grades from Canvas... 🧊🐧</div>
+        </div>
+        
+    </main>
+
+    <script>
+        async function applySettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                const settings = data.settings || {};
+                document.documentElement.classList.toggle('dark', settings.theme === 'dark');
+                localStorage.setItem('guino_theme', settings.theme || 'light');
+            } catch (e) {
+                console.error("Failed to load settings:", e);
+            }
+        }
+
+        async function loadGrades() {
+            try {
+                const response = await fetch('/api/grades');
+                const data = await response.json();
+                
+                const container = document.getElementById('grades-container');
+                const subtitle = document.getElementById('grades-subtitle');
+                
+                if (!data.grades || data.grades.length === 0) {
+                    subtitle.innerText = "No grade data available.";
+                    container.innerHTML = `<div class="col-span-full text-center py-10 font-bold text-penguinBlack dark:text-penguinBelly text-xl">Looks like nothing has been graded yet!</div>`;
+                    return;
+                }
+
+                subtitle.innerText = `Displaying grades for ${data.grades.length} active courses.`;
+                container.innerHTML = ''; // Clear loader
+
+                data.grades.forEach(gradeInfo => {
+                    
+                    // Determine color based on grade (simple logic)
+                    let scoreColor = "text-penguinBlack";
+                    const score = parseFloat(gradeInfo.current_score);
+                    if (!isNaN(score)) {
+                        if (score >= 90) scoreColor = "text-green-600";
+                        else if (score >= 80) scoreColor = "text-penguinBeak";
+                        else if (score < 70) scoreColor = "text-red-500";
+                    }
+
+                    const html = `
+                        <div class="bg-penguinBelly text-penguinBlack rounded-lg shadow-md p-6 border-t-4 border-penguinBlack hover:-translate-y-1 transition-transform">
+                            <h3 class="text-lg font-bold mb-4 border-b border-slateGray/20 pb-2">${gradeInfo.course}</h3>
+                            
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-slateGray font-medium">Current Score:</span>
+                                <span class="text-2xl font-black ${scoreColor}">${gradeInfo.current_score}${gradeInfo.current_score !== "N/A" ? "%" : ""}</span>
+                            </div>
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-slateGray font-medium">Current Grade:</span>
+                                <span class="font-bold text-lg">${gradeInfo.current_grade !== "N/A" ? gradeInfo.current_grade : '-'}</span>
+                            </div>
+                            
+                            <div class="mt-4 pt-4 border-t border-slateGray/20 text-sm">
+                                <div class="flex justify-between items-center text-slateGray/80">
+                                    <span>Final Score (all ungraded = 0):</span>
+                                    <span>${gradeInfo.final_score}${gradeInfo.final_score !== "N/A" ? "%" : ""}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('grades-container').innerHTML = `<div class="col-span-full text-red-500 text-center font-bold">Failed to load grades from backend.</div>`;
+            }
+        }
+
+        window.onload = () => {
+            applySettings();
+            loadGrades();
+        };
+    </script>
+    <script src="/static/return-scene.js"></script>
+</body>
+</html>

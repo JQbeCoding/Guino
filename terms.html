@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guino — Terms of Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { penguinBlack: '#1C1C1C', penguinBelly: '#F5F5F0', penguinBeak: '#F4A227', glacialBlue: '#E8F1F5', slateGray: '#5C6B73', nightIce: '#0D1117' }
+                }
+            }
+        }
+    </script>
+    <script>
+        if (localStorage.getItem('guino_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+</head>
+<body class="bg-glacialBlue dark:bg-nightIce min-h-screen text-penguinBlack dark:text-penguinBelly font-sans">
+    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg">
+        <div class="max-w-3xl mx-auto">
+            <a href="/" class="text-2xl font-black"><span class="text-penguinBeak">G</span>uino</a>
+        </div>
+    </nav>
+    <main class="max-w-3xl mx-auto mt-10 p-6">
+        <h1 class="text-3xl font-bold mb-2">Terms of Service</h1>
+        <p class="text-slateGray text-sm mb-8">Last updated: July 29, 2026</p>
+
+        <h2 class="text-xl font-bold mt-6 mb-2">Acceptance</h2>
+        <p class="mb-4">By using Guino, you agree to these terms. Guino is provided as a personal academic tool without warranty.</p>
+
+        <h2 class="text-xl font-bold mt-6 mb-2">SMS Opt-In &amp; Opt-Out</h2>
+        <p class="mb-4">SMS reminders are optional. You opt in by entering your phone number in Settings and enabling reminders. Message frequency varies based on assignment due dates. Message and data rates may apply. Reply STOP to opt out, or disable in Settings.</p>
+
+        <h2 class="text-xl font-bold mt-6 mb-2">Sample Messages</h2>
+        <p class="mb-2 font-mono text-sm bg-penguinBelly dark:bg-penguinBlack p-3 rounded">Hey Clark! Guino notifications are working. You'll get assignment reminders here when things are due soon.</p>
+        <p class="mb-4 font-mono text-sm bg-penguinBelly dark:bg-penguinBlack p-3 rounded">Assignment check-in for Clark: - 🔴 URGENT Lab 3 (ITCS 3190) due Wed, Jul 30 at 11:59 PM</p>
+
+        <h2 class="text-xl font-bold mt-6 mb-2">Disclaimer</h2>
+        <p class="mb-4">Guino is not affiliated with Canvas or your university. AI-generated content may be inaccurate — always verify due dates in Canvas.</p>
+
+        <p class="mt-8"><a href="/" class="text-penguinBeak font-bold hover:underline">← Back to Guino</a></p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guino Courses</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { penguinBlack: '#1C1C1C', penguinBelly: '#F5F5F0', penguinBeak: '#F4A227', glacialBlue: '#E8F1F5', slateGray: '#5C6B73', nightIce: '#0D1117' },
+                    animation: { 'waddle': 'waddle 0.5s ease-in-out infinite alternate', 'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' },
+                    keyframes: { waddle: { '0%': { transform: 'rotate(-5deg) translateY(0)' }, '100%': { transform: 'rotate(5deg) translateY(-2px)' } } }
+                }
+            }
+        }
+    </script>
+    <script>
+        if (localStorage.getItem('guino_theme') === 'dark') document.documentElement.classList.add('dark');
+    </script>
+</head>
+<body class="bg-glacialBlue dark:bg-nightIce min-h-screen text-penguinBlack dark:text-penguinBelly font-sans selection:bg-penguinBeak selection:text-white transition-colors">
+
+    <nav class="bg-penguinBlack text-penguinBelly p-4 shadow-lg sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-black tracking-tight"><a href="/" data-guino-return class="hover:text-penguinBeak transition-colors"><span class="text-penguinBeak">G</span>uino</a></h1>
+            <div class="space-x-1 sm:space-x-4 font-medium text-sm sm:text-base">
+                <a href="/" data-guino-return class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Ice Scene</a>
+                <a href="/dashboard" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Dashboard</a>
+                <button class="px-3 py-1 rounded bg-penguinBeak text-penguinBlack hover:animate-waddle transition-colors cursor-pointer">Courses</button>
+                <a href="/gpa" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">GPA</a>
+                <a href="/study" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Study</a>
+                <a href="/settings" class="px-3 py-1 rounded hover:bg-slateGray transition-colors inline-block">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto mt-10 p-4">
+        <div class="mb-8 border-b-2 border-slateGray/30 pb-4">
+            <h2 class="text-3xl font-bold">Course Intelligence.</h2>
+            <p class="text-slateGray mt-2" id="courses-subtitle">Guino is reading your syllabi...</p>
+        </div>
+
+        <div id="ai-loading" class="flex flex-col items-center justify-center py-12">
+            <div class="w-16 h-16 bg-penguinBlack rounded-full flex items-center justify-center animate-pulse-fast shadow-xl">
+                <span class="text-2xl">📚</span>
+            </div>
+            <p class="mt-4 font-bold text-slateGray animate-pulse">Extracting grading policies and building study plans...</p>
+        </div>
+
+        <!-- Container for dynamically injected AI course cards -->
+        <div id="courses-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+        </div>
+        
+    </main>
+
+    <script>
+        async function applySettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                const settings = data.settings || {};
+                document.documentElement.classList.toggle('dark', settings.theme === 'dark');
+                localStorage.setItem('guino_theme', settings.theme || 'light');
+            } catch (e) {
+                console.error("Failed to load settings:", e);
+            }
+        }
+
+        async function loadCourses() {
+            try {
+                // Fetch AI-processed syllabus data
+                const response = await fetch('/api/courses_info');
+                const data = await response.json();
+                
+                const container = document.getElementById('courses-container');
+                const loader = document.getElementById('ai-loading');
+                const subtitle = document.getElementById('courses-subtitle');
+                
+                loader.classList.add('hidden');
+                container.classList.remove('hidden');
+
+                if (!data.courses_info || data.courses_info.length === 0) {
+                    subtitle.innerText = "No active courses found.";
+                    container.innerHTML = `<div class="col-span-full text-center py-10 font-bold text-penguinBlack dark:text-penguinBelly text-xl">Looks like you aren't enrolled in anything!</div>`;
+                    return;
+                }
+
+                subtitle.innerText = `Syllabus summaries and action plans for ${data.courses_info.length} active classes.`;
+
+                data.courses_info.forEach(course => {
+                    const html = `
+                        <div class="bg-penguinBelly text-penguinBlack rounded-lg shadow-lg p-6 border-t-4 border-penguinBlack hover:-translate-y-1 transition-transform relative overflow-hidden group">
+                            <h3 class="text-xl font-bold mb-3 border-b-2 border-slateGray/20 pb-2 pr-8">${course.course || "Unknown Course"}</h3>
+                            
+                            <div class="mb-5 bg-white p-4 rounded border border-slateGray/20 shadow-inner">
+                                <h4 class="text-xs font-bold text-slateGray uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <span>⚖️</span> Grading Policy
+                                </h4>
+                                <p class="text-penguinBlack font-medium text-sm leading-snug">
+                                    ${course.grading_policy || "Not explicitly detailed in the syllabus."}
+                                </p>
+                            </div>
+                            
+                            <h4 class="font-bold text-sm text-slateGray uppercase tracking-wider mb-3">🎯 What to Focus On</h4>
+                            <ul class="space-y-3">
+                                ${(course.study_bullets || []).map(bullet => `
+                                    <li class="flex items-start gap-2">
+                                        <div class="flex-shrink-0 w-5 h-5 rounded bg-penguinBeak text-penguinBlack flex items-center justify-center font-bold text-xs shadow mt-0.5">
+                                            ✓
+                                        </div>
+                                        <span class="text-penguinBlack font-medium text-sm mt-0.5">${bullet}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+
+            } catch (e) {
+                console.error("UI Render Error:", e);
+                const loader = document.getElementById('ai-loading');
+                loader.classList.remove('hidden');
+                loader.innerHTML = `<div class="text-red-500 text-center font-bold mt-4">Failed to render course intelligence. Check the console!</div>`;
+            }
+        }
+
+        // Trigger on load
+        window.onload = () => {
+            applySettings();
+            loadCourses();
+        };
+    </script>
+    <script src="/static/return-scene.js"></script>
+</body>
+</html>
